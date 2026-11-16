@@ -4,7 +4,7 @@ export default {
   app: {
     name: 'Portscope',
     identifier: 'local.portscope.desktop',
-    version: '1.0.0',
+    version: '1.0.1',
     description: 'Vos services TCP locaux, réunis au même endroit.'
   },
   build: {
