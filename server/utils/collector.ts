@@ -25,7 +25,7 @@ async function listeners(platform: string, signal?: AbortSignal) {
     try {
       const result = await exec('powershell.exe', [
         '-NoLogo', '-NoProfile', '-NonInteractive', '-Command', WINDOWS_LISTENERS_SCRIPT
-      ], { ...commandOptions, timeout: 10000, windowsHide: true, signal, killSignal: 'SIGKILL' })
+      ], { ...commandOptions, timeout: 15000, windowsHide: true, signal, killSignal: 'SIGKILL' })
       return {
         listeners: parseWindowsListeners(result.stdout),
         warnings: result.stderr.trim() ? ['Some listener metadata could not be read.'] : []
