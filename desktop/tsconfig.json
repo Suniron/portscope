@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "skipLibCheck": true,
+    "baseUrl": "..",
+    "paths": {
+      "electrobun": [".hutch/devkit/api/sdks/main/index.ts"],
+      "electrobun/main": [".hutch/devkit/api/sdks/main/index.ts"]
+    },
+    "types": ["node", "bun"]
+  },
+  "include": ["*.ts", "../electrobun.config.ts", "../hutch.config.ts"]
+}

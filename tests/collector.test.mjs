@@ -23,7 +23,7 @@ test('project context reads actual Git metadata, nested cwd and linked worktrees
   await writeFile(join(root, '.git', 'HEAD'), 'ref: refs/heads/main\n')
   await writeFile(join(root, 'package.json'), '{"name":"example-project"}')
   assert.deepEqual(await projectContext(join(root, 'src')), {
-    root, name: 'example-project', branch: 'main', branchUrl: null, worktree: null
+    root: root.replaceAll('\\', '/'), name: 'example-project', branch: 'main', branchUrl: null, worktree: null
   })
   await mkdir(join(root, '.git', 'worktrees', 'topic'), { recursive: true })
   await mkdir(linked)
@@ -32,7 +32,8 @@ test('project context reads actual Git metadata, nested cwd and linked worktrees
   await writeFile(join(root, '.git/worktrees/topic/commondir'), '../..\n')
   await writeFile(join(root, '.git/worktrees/topic/gitdir'), `${join(linked, '.git')}\n`)
   assert.deepEqual(await projectContext(linked), {
-    root: linked, name: 'linked & worktree', branch: 'topic', branchUrl: null, worktree: linked
+    root: linked.replaceAll('\\', '/'), name: 'linked & worktree', branch: 'topic', branchUrl: null,
+    worktree: linked.replaceAll('\\', '/')
   })
 
   async function object(type, content) {
@@ -87,12 +88,14 @@ test('HTTP links require known server identity, not a familiar port', () => {
       { address: '*', port: 5432, family: null, url: null }
     ]
   }
-  identifyOwnEndpoint(service, 99)
+  identifyOwnEndpoint(service, 99, 3000)
   assert(service.endpoints.every(e => e.url === null))
-  identifyOwnEndpoint(service, 10)
+  identifyOwnEndpoint(service, 10, 3000)
   assert.equal(service.endpoints[0].url, 'http://127.0.0.1:3000')
-  assert.equal(service.endpoints[1].url, 'http://[::1]:8080')
+  assert.equal(service.endpoints[1].url, null, 'same-process IPC ports are not HTTP evidence')
   assert.equal(service.endpoints[2].url, null)
+  identifyOwnEndpoint(service, 10, 8080)
+  assert.equal(service.endpoints[1].url, 'http://[::1]:8080')
 })
 
 test('cache coalesces concurrent requests and expires after completion', async () => {
@@ -122,7 +125,7 @@ test('cache retains a failure briefly, never disguises it as healthy empty or st
   assert.equal(calls, 1)
 })
 
-test('a real FIFO manifest cannot block project discovery', { timeout: 8000 }, async t => {
+test('a real FIFO manifest cannot block project discovery', { skip: process.platform === 'win32', timeout: 8000 }, async t => {
   const temp = await mkdtemp(join(tmpdir(), 'portscope-fifo-'))
   t.after(() => rm(temp, { recursive: true, force: true }))
   const exec = promisify(execFile)
@@ -205,7 +208,7 @@ test('oversized and non-regular manifests are not read as project metadata', asy
 })
 
 test('real platform collection returns safe inventory fields', {
-  skip: !['darwin', 'linux'].includes(process.platform), timeout: 20000
+  skip: !['darwin', 'linux', 'win32'].includes(process.platform), timeout: 20000
 }, async () => {
   const inventory = await collectInventory()
   assert.equal(inventory.platform, process.platform)

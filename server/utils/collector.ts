@@ -7,17 +7,33 @@ import { homedir } from 'node:os'
 import type { Inventory, ObservedService } from '../../shared/types/inventory.ts'
 import { groupListeners, parseLsof, parseLsofCwds, parseSs } from './parsers.ts'
 import { branchWebUrl } from './branch-url.ts'
+import { parseWindowsListeners, WINDOWS_LISTENERS_SCRIPT } from './windows.ts'
 
 const exec = promisify(execFile)
 const commandOptions = { timeout: 5000, maxBuffer: 4 * 1024 * 1024, encoding: 'utf8' as const }
 
 export class CollectionError extends Error {
   constructor() {
-    super('Local inventory is unavailable. Install lsof (macOS/Linux) or ss (Linux), and check process permissions.')
+    super(process.platform === 'win32'
+      ? 'Local inventory is unavailable. Check that Windows PowerShell and Get-NetTCPConnection are available to the current user, then retry.'
+      : 'Local inventory is unavailable. Install lsof (macOS/Linux) or ss (Linux), and check process permissions.')
   }
 }
 
 async function listeners(platform: string, signal?: AbortSignal) {
+  if (platform === 'win32') {
+    try {
+      const result = await exec('powershell.exe', [
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-Command', WINDOWS_LISTENERS_SCRIPT
+      ], { ...commandOptions, timeout: 10000, windowsHide: true, signal, killSignal: 'SIGKILL' })
+      return {
+        listeners: parseWindowsListeners(result.stdout),
+        warnings: result.stderr.trim() ? ['Some listener metadata could not be read.'] : []
+      }
+    } catch {
+      throw new CollectionError()
+    }
+  }
   if (platform !== 'darwin' && platform !== 'linux') throw new CollectionError()
   if (platform === 'linux') {
     try {
@@ -157,11 +173,15 @@ export async function projectContext(cwd: string, signal?: AbortSignal): Promise
   }
 }
 
-export function identifyOwnEndpoint(service: ObservedService, ownPid = process.pid): void {
+export function identifyOwnEndpoint(
+  service: ObservedService,
+  ownPid = process.pid,
+  ownPort = Number(process.env.PORTSCOPE_PORT)
+): void {
   if (service.pid !== ownPid) return
   for (const endpoint of service.endpoints) {
     // Only our own HTTP server is known. No probes or port-based guesses.
-    if (endpoint.address === '127.0.0.1' || endpoint.address === '::1') {
+    if (endpoint.port === ownPort && (endpoint.address === '127.0.0.1' || endpoint.address === '::1')) {
       endpoint.url = `http://${endpoint.family === 'IPv6' ? '[::1]' : '127.0.0.1'}:${endpoint.port}`
     }
   }
@@ -227,8 +247,9 @@ export async function collectInventory(signal?: AbortSignal): Promise<Inventory>
   for (const service of services) identifyOwnEndpoint(service)
   // Limit metadata work, never the list of visible endpoints.
   const projects = new Map<string, Promise<ObservedService['project']>>()
-  const complete = await enrichServices(services, async (service, signal) => {
-    const cwd = directories ? directories.get(service.pid!) ?? null : await linuxCwd(service.pid!, signal)
+  const complete = platform === 'win32' || await enrichServices(services, async (service, signal) => {
+    const cwd = directories ? directories.get(service.pid!) ?? null
+      : platform === 'linux' ? await linuxCwd(service.pid!, signal) : null
     let project: ObservedService['project'] = null
     if (cwd && !signal.aborted) {
       if (!projects.has(cwd)) projects.set(cwd, projectContext(cwd, signal))
@@ -237,7 +258,10 @@ export async function collectInventory(signal?: AbortSignal): Promise<Inventory>
     return { cwd, project }
   }, signal)
   const warnings = [...result.warnings]
-  if (services.some(s => s.pid === null || s.cwd === null)) {
+  if (platform === 'win32' && services.length) {
+    warnings.push('Windows process working directories are unavailable through the standard APIs used by Portscope; cwd and project context remain unknown.')
+  }
+  if (services.some(s => s.pid === null || s.processName === null || (platform !== 'win32' && s.cwd === null))) {
     warnings.push('Some process or project metadata is unavailable to the current user; those services remain visible.')
   }
   if (!complete) warnings.push('Metadata collection was bounded to keep refresh responsive; some project context is unknown.')

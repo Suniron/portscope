@@ -8,8 +8,9 @@ web
 
 ## Stack
 
-Nuxt 4, Nuxt UI 4, Tailwind CSS 4 and TypeScript. The server and local collector
-run as one native application on macOS or Linux.
+Nuxt 4, Nuxt UI 4, Tailwind CSS 4 and TypeScript. Electrobun embeds Bun, the server
+and frontend in a desktop application on macOS and Windows. The web CLI also
+supports Linux.
 
 ## Users
 
@@ -34,6 +35,8 @@ configurable, defaulting to 3100. It can start automatically at login.
   labeled HTTP attempt rather than being presented as known web services.
 - Remote branch links when the tracking branch and hosting provider are known.
 - Unknown metadata and collection errors remain explicit.
+- Windows provides ports and process names; process working directories and their
+  project/Git context remain unknown.
 - No service management, Docker requirement, central service or project-specific
   dependencies.
 - No collection of secrets, process environments or full command lines.

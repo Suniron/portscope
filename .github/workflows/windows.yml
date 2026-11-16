@@ -1,0 +1,38 @@
+name: Windows application
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Test Windows collection and desktop runtime
+        run: node --test tests/windows*.test.mjs tests/collector.test.mjs tests/desktop.test.mjs tests/parsers.test.mjs tests/browser-url.test.mjs tests/security.test.mjs tests/service-groups.test.mjs
+      - name: Build Windows x64 installer
+        run: pnpm desktop:build
+      - name: Typecheck
+        run: |
+          pnpm typecheck
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm desktop:typecheck
+      - name: Test standalone packaged backend
+        run: pnpm desktop:test
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Portscope-Windows-x64
+          path: artifacts/win-x64-Portscope-Setup.zip
+          if-no-files-found: error
+          retention-days: 30

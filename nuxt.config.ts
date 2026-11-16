@@ -7,12 +7,17 @@ export default defineNuxtConfig({
   ssr: true,
   devtools: { enabled: false },
   devServer: { host: '127.0.0.1', port: 3100 },
-  nitro: { preset: 'node-server' },
+  nitro: process.env.PORTSCOPE_DESKTOP === '1'
+    ? { preset: 'node-listener', serveStatic: true, output: { dir: '.output-desktop' } }
+    : { preset: 'node-server' },
   typescript: { strict: true },
   app: {
     head: {
       title: 'Portscope',
-      meta: [{ name: 'description', content: 'Your local listening services, in one place.' }]
+      meta: [{ name: 'description', content: 'Vos services TCP locaux, réunis au même endroit.' }],
+      link: [
+        { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/favicon.png' }
+      ]
     }
   }
 })

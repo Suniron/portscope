@@ -1,6 +1,10 @@
 node_modules/
 .nuxt/
 .output/
+.output-desktop/
+.hutch/
+build/
+artifacts/
 .data/
 coverage/
 *.log

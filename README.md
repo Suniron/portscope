@@ -1,9 +1,54 @@
 # Portscope
 
-A read-only dashboard of TCP services listening on your machine. Native macOS and
-Linux, one Nuxt process, no database, no project registration.
+A read-only dashboard of TCP services listening on your machine. macOS, Windows
+and Linux collection, one Nuxt process, no database, no project registration.
 
 ## Run
+
+### Desktop application (Electrobun)
+
+The standalone app includes Bun, the Nuxt server and all frontend assets. End users
+need neither Node, Bun nor pnpm. Build on the target OS with Node 22.18+ and pnpm
+(build-time only): macOS 14+ on Apple Silicon, or Windows 10/11 x64 with the
+Microsoft Edge WebView2 runtime.
+
+```sh
+pnpm install
+pnpm desktop:build
+```
+
+Electrobun 2.0.6 and its paired Hutch toolchain are pinned; the npm bootstrap
+downloads build tools into the ignored project-local `.hutch/store/`, not a global
+installation. The build uses `.output-desktop/` (`node-listener`), separate from the
+web CLI's `.output/` (`node-server`).
+
+- **macOS:** `build/stable-macos-arm64/Portscope.app`. Copy it manually in Finder
+  to your preferred Applications folder, then double-click it.
+- **Windows:** `artifacts/win-x64-Portscope-Setup.zip`. Extract the **whole ZIP**
+  before running the setup executable: its adjacent hidden payload is required.
+  Windows PowerShell and the NetTCPIP module provide read-only port collection.
+
+`pnpm desktop:start` launches the built app without installing it. No login item
+or background service is installed. Closing the last window or choosing Quit
+quits the app and its same-process server; other Portscope servers are never stopped.
+
+The **Windows application** GitHub Actions workflow builds on `windows-latest`
+(Electrobun does not cross-compile from macOS). Run it manually in the Actions tab;
+after collection, type and packaged-runtime checks pass, download
+**Portscope-Windows-x64** from the run's artifacts. Builds do not run on every push.
+Artifacts are retained for 30 days; the repository's normal access controls apply.
+
+Each launch reserves its own free port on `127.0.0.1`, even when the web default
+3100 is occupied. The normal Host/Origin protections remain active. Only that
+listener, not Electrobun's same-process IPC ports, is advertised as HTTP. External
+HTTP(S) links open in the default browser; the sandboxed webview cannot navigate
+away from its exact local origin and exposes no privileged RPC.
+
+These builds are **not signed or notarized**. macOS Gatekeeper or Windows
+SmartScreen may require explicit approval. Signing/notarization and
+Intel Mac/Linux/Windows ARM64 app builds are outside this setup.
+
+### Web CLI
 
 Use Node 22.18+ and pnpm. Install dependencies and build:
 
@@ -29,7 +74,11 @@ Only `PORTSCOPE_PORT` configures the supported launcher. No `.env` file is neede
 
 ## Collection and privacy
 
-- macOS: `lsof`; Linux: `ss` plus `/proc`, falling back to `lsof`.
+- macOS: `lsof`; Linux: `ss` plus `/proc`, falling back to `lsof`;
+  Windows: PowerShell `Get-NetTCPConnection` and process names.
+- Windows process working directories are not exposed by this collector.
+  Directories and their project/Git context remain explicitly unknown; executable
+  directories are never substituted for process working directories.
 - Process names, PIDs, listening addresses, cwd and read-only Git/project metadata.
 - No full command lines, process environments, HTTP probes, cookies or secrets.
 - Endpoints are grouped by PID where available. Unknown owners remain visible.
@@ -90,13 +139,17 @@ loop conceals bind failures.
 ```sh
 pnpm test
 pnpm typecheck
+pnpm desktop:typecheck # after desktop:build (prepares the generated SDK)
+pnpm desktop:test # after desktop:build; extracts and runs bundled Bun/server without a GUI
 pnpm build
 pnpm test:integration # launches temporary production servers and external TCP fixtures
 ```
 
-Tests exercise lsof/ss parsing (IPv4/IPv6 and missing owners), real Git metadata
+Tests exercise lsof/ss/PowerShell parsing (IPv4/IPv6 and missing owners), real Git metadata
 including worktrees, live collection on the current OS, cache/error behavior,
 Host/Origin protection, occupied-port rejection, and safe service-file generation.
-macOS tests do not establish that the Linux collector or systemd activation
-works on a real Linux host. User-login activation/removal is a separate,
-approval-gated machine check.
+The Windows workflow runs the PowerShell collector against real listeners and
+tests the packaged Bun backend without system JS tools. Native window interactions
+and installer UI still require a Windows desktop. macOS tests do not establish that
+the Linux collector or systemd activation works on a real Linux host. User-login
+activation/removal is a separate, approval-gated machine check.

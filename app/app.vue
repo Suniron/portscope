@@ -84,7 +84,7 @@ watch(automatic, (enabled) => {
       <div class="shell header-inner">
         <div class="app-heading">
           <span class="brand">
-            <UIcon name="i-lucide-radio" aria-hidden="true" />
+            <img src="/icons/icon-192.png" alt="" width="28" height="28" class="brand-icon">
             Portscope
           </span>
           <h1 id="page-title">Services locaux</h1>

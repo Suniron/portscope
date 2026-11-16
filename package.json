@@ -6,6 +6,10 @@
   "scripts": {
     "dev": "node scripts/start.mjs --dev",
     "build": "nuxt build",
+    "desktop:build": "node scripts/desktop.mjs build",
+    "desktop:start": "node scripts/desktop.mjs start",
+    "desktop:typecheck": "tsc -p desktop/tsconfig.json",
+    "desktop:test": "node scripts/desktop.mjs test",
     "start": "node scripts/start.mjs",
     "postinstall": "nuxt prepare",
     "typecheck": "nuxt typecheck",
@@ -20,7 +24,9 @@
     "tailwindcss": "^4.3.0"
   },
   "devDependencies": {
+    "@types/bun": "^1.4.4",
     "@types/node": "^24.0.0",
+    "electrobun": "2.0.6",
     "typescript": "^5.9.3",
     "vue-tsc": "^3.2.5"
   },
