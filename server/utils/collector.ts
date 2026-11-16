@@ -3,6 +3,7 @@ import { constants } from 'node:fs'
 import { open, readlink, realpath } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import { promisify } from 'node:util'
+import { homedir } from 'node:os'
 import type { Inventory, ObservedService } from '../../shared/types/inventory.ts'
 import { groupListeners, parseLsof, parseLsofCwds, parseSs } from './parsers.ts'
 import { branchWebUrl } from './branch-url.ts'
@@ -240,7 +241,8 @@ export async function collectInventory(signal?: AbortSignal): Promise<Inventory>
     warnings.push('Some process or project metadata is unavailable to the current user; those services remain visible.')
   }
   if (!complete) warnings.push('Metadata collection was bounded to keep refresh responsive; some project context is unknown.')
-  return { collectedAt: new Date().toISOString(), platform, services, warnings }
+  const homeDirectory = await realpath(homedir()).catch(() => homedir())
+  return { collectedAt: new Date().toISOString(), platform, homeDirectory, services, warnings }
 }
 
 export function createInventoryCache(collect: (signal: AbortSignal) => Promise<Inventory>, ttl = 5000, timeoutMs = 20000) {

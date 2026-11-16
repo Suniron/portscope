@@ -2,6 +2,7 @@
 import type { Inventory } from '#shared/types/inventory'
 import { fr } from '@nuxt/ui/locale'
 import { httpAttemptUrl } from './utils/browser-url'
+import { groupServices } from './utils/service-groups'
 
 useHead({
   title: 'Portscope — Services locaux',
@@ -43,6 +44,7 @@ const services = computed(() => {
 const endpointCount = computed(() =>
   inventory.value?.services.reduce((count, service) => count + service.endpoints.length, 0) ?? 0,
 )
+const serviceGroups = computed(() => groupServices(services.value, inventory.value?.homeDirectory))
 const stale = computed(() =>
   inventory.value !== null && now.value - Date.parse(inventory.value.collectedAt) > 20_000,
 )
@@ -80,10 +82,13 @@ watch(automatic, (enabled) => {
     <a class="skip-link" href="#inventory">Aller aux services</a>
     <header class="app-header">
       <div class="shell header-inner">
-        <span class="brand">
-          <UIcon name="i-lucide-radio" aria-hidden="true" />
-          Portscope
-        </span>
+        <div class="app-heading">
+          <span class="brand">
+            <UIcon name="i-lucide-radio" aria-hidden="true" />
+            Portscope
+          </span>
+          <h1 id="page-title">Services locaux</h1>
+        </div>
         <span class="machine-label">
           <UIcon name="i-lucide-monitor" aria-hidden="true" />
           Cette machine
@@ -92,23 +97,7 @@ watch(automatic, (enabled) => {
       </div>
     </header>
 
-    <main id="inventory" class="shell workspace" tabindex="-1">
-      <section class="intro" aria-labelledby="page-title">
-        <div>
-          <h1 id="page-title">Services locaux</h1>
-          <p>Retrouvez le bon port, le bon projet, la bonne branche.</p>
-        </div>
-        <div class="freshness">
-          <span class="state" :class="{ 'state-warning': error || stale, 'state-paused': !automatic }">
-            <span class="state-dot" aria-hidden="true" />
-            {{ stateLabel }}
-          </span>
-          <span v-if="updatedAt" class="updated-at">
-            Dernière collecte <time :datetime="inventory?.collectedAt">{{ updatedAt }}</time>
-          </span>
-        </div>
-      </section>
-
+    <main id="inventory" class="shell workspace" tabindex="-1" aria-labelledby="page-title">
       <div class="toolbar">
         <div class="search-field">
           <label for="service-search" class="sr-only">Rechercher un port, un projet, une branche ou un dossier</label>
@@ -118,7 +107,7 @@ watch(automatic, (enabled) => {
             type="search"
             icon="i-lucide-search"
             placeholder="Port, projet, branche, dossier…"
-            size="lg"
+            size="md"
             class="w-full"
             :ui="{ base: 'placeholder:text-muted' }"
             autocomplete="off"
@@ -175,9 +164,16 @@ watch(automatic, (enabled) => {
           </template>
           <template v-else>Recherche des services en écoute…</template>
         </p>
-        <span class="read-only">
-          <UIcon name="i-lucide-eye" aria-hidden="true" /> Lecture seule
-        </span>
+        <div class="freshness">
+          <span class="state" :class="{ 'state-warning': error || stale, 'state-paused': !automatic }">
+            <span class="state-dot" aria-hidden="true" />
+            {{ stateLabel }}
+          </span>
+          <span v-if="updatedAt" class="updated-at">
+            <span class="sr-only">Dernière collecte </span>
+            <time :datetime="inventory?.collectedAt">{{ updatedAt }}</time>
+          </span>
+        </div>
       </div>
 
       <div v-if="!inventory && status === 'pending'" class="empty-state" role="status">
@@ -202,88 +198,98 @@ watch(automatic, (enabled) => {
           <span>Dossier du processus</span>
         </div>
         <ul class="service-list" aria-label="Services en écoute">
-          <li v-for="service in services" :key="service.id" class="service-row service-grid">
-            <ul class="endpoints" aria-label="Points d’écoute">
-              <li v-for="endpoint in service.endpoints" :key="`${endpoint.family}:${endpoint.address}:${endpoint.port}`">
-                <UButton
-                  v-if="endpoint.url"
-                  :to="endpoint.url"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  variant="soft"
-                  size="sm"
-                  trailing-icon="i-lucide-arrow-up-right"
-                  :aria-label="`Ouvrir ${endpoint.url} dans un nouvel onglet`"
-                  class="port-link"
-                >
-                  {{ endpoint.port }}
-                </UButton>
-                <template v-else>
-                  <span class="port-number">{{ endpoint.port }}</span>
+          <template v-for="group in serviceGroups" :key="group.id">
+            <li
+              v-for="(service, index) in group.services"
+              :key="service.id"
+              class="service-row service-grid"
+              :class="{ 'group-member': index < group.services.length - 1, 'group-continuation': index > 0 }"
+            >
+              <ul class="endpoints" aria-label="Points d’écoute">
+                <li v-for="endpoint in service.endpoints" :key="`${endpoint.family}:${endpoint.address}:${endpoint.port}`">
                   <UButton
-                    v-if="httpAttemptUrl(endpoint)"
-                    :to="httpAttemptUrl(endpoint)"
+                    v-if="endpoint.url"
+                    :to="endpoint.url"
                     target="_blank"
                     rel="noopener noreferrer"
-                    color="neutral"
-                    variant="link"
-                    size="xs"
+                    variant="soft"
+                    size="sm"
                     trailing-icon="i-lucide-arrow-up-right"
-                    :aria-label="`Essayer ${httpAttemptUrl(endpoint)} dans un nouvel onglet ; protocole non identifié`"
-                    class="http-attempt"
+                    :aria-label="`Ouvrir ${endpoint.url} dans un nouvel onglet`"
+                    class="port-link"
                   >
-                    Essayer HTTP
+                    {{ endpoint.port }}
                   </UButton>
-                  <span v-else class="unknown">Adresse non prise en charge par le navigateur</span>
+                  <template v-else>
+                    <span class="port-number">{{ endpoint.port }}</span>
+                    <UButton
+                      v-if="httpAttemptUrl(endpoint)"
+                      :to="httpAttemptUrl(endpoint)"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      color="neutral"
+                      variant="link"
+                      size="xs"
+                      trailing-icon="i-lucide-arrow-up-right"
+                      :aria-label="`Essayer ${httpAttemptUrl(endpoint)} dans un nouvel onglet ; protocole non identifié`"
+                      class="http-attempt"
+                    >
+                      Essayer HTTP
+                    </UButton>
+                    <span v-else class="unknown">Adresse non prise en charge par le navigateur</span>
+                  </template>
+                  <span class="endpoint-address">
+                    {{ endpoint.address }}
+                    <span v-if="!endpoint.url" class="protocol-label">TCP</span>
+                  </span>
+                </li>
+              </ul>
+              <div class="service-name">
+                <h2>{{ service.project?.name ?? service.processName ?? 'Processus non identifié' }}</h2>
+                <span class="process-detail">
+                  {{ service.processName ?? 'Nom indisponible' }}
+                  <span v-if="service.pid !== null"> · PID {{ service.pid }}</span>
+                </span>
+              </div>
+              <div class="git-context">
+                <template v-if="service.project">
+                  <a
+                    v-if="service.project.branchUrl"
+                    :href="service.project.branchUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="branch-name branch-link"
+                    :aria-label="`Ouvrir la branche distante associée à ${service.project.branch ?? service.project.name} dans un nouvel onglet`"
+                  >
+                    <UIcon name="i-lucide-git-branch" aria-hidden="true" />
+                    {{ service.project.branch ?? 'Branche distante' }}
+                    <UIcon name="i-lucide-arrow-up-right" aria-hidden="true" />
+                  </a>
+                  <span v-else class="branch-name">
+                    <UIcon name="i-lucide-git-branch" aria-hidden="true" />
+                    {{ service.project.branch ?? 'Branche non identifiée' }}
+                  </span>
+                  <span v-if="service.project.worktree" class="worktree-name">
+                    <span class="sr-only">Worktree : </span>{{ service.project.worktree }}
+                  </span>
                 </template>
-                <span class="endpoint-address">
-                  {{ endpoint.address }}
-                  <span v-if="!endpoint.url" class="protocol-label">TCP</span>
+                <span v-else class="unknown">Contexte Git non identifié</span>
+              </div>
+              <div class="directory" :class="{ 'sr-only': index > 0 }">
+                <code v-if="service.cwd">{{ service.cwd }}</code>
+                <span v-else class="unknown">Dossier indisponible</span>
+                <span v-if="group.services.length > 1 && index === 0" class="process-detail">
+                  {{ group.services.length }} processus
                 </span>
-              </li>
-            </ul>
-            <div class="service-name">
-              <h2>{{ service.project?.name ?? service.processName ?? 'Processus non identifié' }}</h2>
-              <span class="process-detail">
-                {{ service.processName ?? 'Nom indisponible' }}
-                <span v-if="service.pid !== null"> · PID {{ service.pid }}</span>
-              </span>
-            </div>
-            <div class="git-context">
-              <template v-if="service.project">
-                <a
-                  v-if="service.project.branchUrl"
-                  :href="service.project.branchUrl"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="branch-name branch-link"
-                  :aria-label="`Ouvrir la branche distante associée à ${service.project.branch ?? service.project.name} dans un nouvel onglet`"
-                >
-                  <UIcon name="i-lucide-git-branch" aria-hidden="true" />
-                  {{ service.project.branch ?? 'Branche distante' }}
-                  <UIcon name="i-lucide-arrow-up-right" aria-hidden="true" />
-                </a>
-                <span v-else class="branch-name">
-                  <UIcon name="i-lucide-git-branch" aria-hidden="true" />
-                  {{ service.project.branch ?? 'Branche non identifiée' }}
-                </span>
-                <span v-if="service.project.worktree" class="worktree-name">
-                  <span class="sr-only">Worktree : </span>{{ service.project.worktree }}
-                </span>
-              </template>
-              <span v-else class="unknown">Contexte Git non identifié</span>
-            </div>
-            <div class="directory">
-              <code v-if="service.cwd">{{ service.cwd }}</code>
-              <span v-else class="unknown">Dossier indisponible</span>
-            </div>
-          </li>
+              </div>
+            </li>
+          </template>
         </ul>
       </template>
 
       <footer class="workspace-footer">
         <span>Un port ouvert ne signifie pas qu’un service est une application web.</span>
-        <span>{{ automatic ? 'Collecte toutes les 5 s, onglet visible' : 'Actualisation automatique en pause' }}</span>
+        <span>Lecture seule · {{ automatic ? 'Collecte toutes les 5 s, onglet visible' : 'Actualisation automatique en pause' }}</span>
       </footer>
     </main>
   </UApp>

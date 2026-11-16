@@ -1,6 +1,7 @@
 export interface Inventory {
   collectedAt: string
   platform: string
+  homeDirectory: string
   services: ObservedService[]
   warnings: string[]
 }

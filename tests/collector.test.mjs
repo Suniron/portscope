@@ -5,7 +5,7 @@ import { deflateSync } from 'node:zlib'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { setTimeout as delay } from 'node:timers/promises'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { collectInventory, createInventoryCache, enrichServices, identifyOwnEndpoint, projectContext } from '../server/utils/collector.ts'
@@ -210,6 +210,7 @@ test('real platform collection returns safe inventory fields', {
   const inventory = await collectInventory()
   assert.equal(inventory.platform, process.platform)
   assert(!Number.isNaN(Date.parse(inventory.collectedAt)))
+  assert.equal(inventory.homeDirectory, await realpath(homedir()).catch(() => homedir()))
   assert(Array.isArray(inventory.warnings))
   for (const service of inventory.services) {
     assert.deepEqual(Object.keys(service).sort(), ['cwd', 'endpoints', 'id', 'pid', 'processName', 'project'])
