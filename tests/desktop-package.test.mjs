@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { cp, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -29,13 +29,16 @@ test('packaged Bun serves Nuxt, assets and inventory without system JS tools or 
   const runtime = pathToFileURL(join(temp, 'desktop/runtime.ts')).href
   const entrypoint = pathToFileURL(join(app, 'Resources/app/nuxt/server/index.mjs')).href
   const resultPath = join(temp, 'checks.txt')
-  await exec(join(app, windows ? 'bin/bun.exe' : 'MacOS/bun'), ['--eval', `
+  const harnessPath = join(temp, 'checks.mjs')
+  await writeFile(harnessPath, `
     import assert from 'node:assert/strict'
     import { writeFile } from 'node:fs/promises'
     import { createServer } from 'node:net'
     import { once } from 'node:events'
     import { request } from 'node:http'
-    import { startDesktopServer } from ${JSON.stringify(runtime)}
+    await writeFile(${JSON.stringify(resultPath)}, 'harness started')
+    try {
+    const { startDesktopServer } = await import(${JSON.stringify(runtime)})
     const ipc = createServer()
     ipc.listen(0, '127.0.0.1')
     await once(ipc, 'listening')
@@ -81,7 +84,12 @@ test('packaged Bun serves Nuxt, assets and inventory without system JS tools or 
       server.close()
       server.closeAllConnections()
     }
-  `], {
+    } catch (error) {
+      await writeFile(${JSON.stringify(resultPath)}, error.stack ?? String(error))
+      process.exitCode = 1
+    }
+  `)
+  await exec(join(app, windows ? 'bin/bun.exe' : 'MacOS/bun'), [harnessPath], {
     cwd: temp,
     env: {
       ...Object.fromEntries(['SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'USERPROFILE', 'LOCALAPPDATA']
@@ -89,6 +97,9 @@ test('packaged Bun serves Nuxt, assets and inventory without system JS tools or 
       PATH: '', LANG: 'en_US.UTF-8', NODE_ENV: 'production'
     },
     timeout: 30000
+  }).catch(async error => {
+    error.message += '\nPackaged checks: ' + await readFile(resultPath, 'utf8').catch(() => 'harness did not start')
+    throw error
   })
   // Packaged Windows runtimes may not expose console output to the parent.
   assert.equal(await readFile(resultPath, 'utf8'), 'checks passed')
