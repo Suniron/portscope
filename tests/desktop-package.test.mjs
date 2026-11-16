@@ -13,7 +13,7 @@ const root = fileURLToPath(new URL('../', import.meta.url))
 
 test('packaged Bun serves Nuxt, assets and inventory without system JS tools or a GUI', {
   skip: process.env.PORTSCOPE_TEST_DESKTOP !== '1',
-  timeout: 90000
+  timeout: 120000
 }, async t => {
   const windows = process.platform === 'win32'
   assert(['darwin', 'win32'].includes(process.platform), 'Build and test on macOS or Windows.')
@@ -29,6 +29,26 @@ test('packaged Bun serves Nuxt, assets and inventory without system JS tools or 
   await cp(join(root, 'scripts/config.mjs'), join(temp, 'scripts/config.mjs'), { recursive: true })
   const runtime = pathToFileURL(join(temp, 'desktop/runtime.ts')).href
   const entrypoint = pathToFileURL(join(app, 'Resources/app/nuxt/server/index.mjs')).href
+  if (windows) {
+    for (const minimal of [true, false]) {
+      const env = minimal
+        ? Object.fromEntries(['SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'USERPROFILE', 'LOCALAPPDATA']
+          .filter(key => process.env[key] !== undefined).map(key => [key, process.env[key]]))
+        : { ...process.env }
+      env.PATH = [
+        join(process.env.SystemRoot, 'System32'),
+        join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0')
+      ].join(';')
+      try {
+        const { stdout } = await exec(join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'),
+          ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', WINDOWS_LISTENERS_SCRIPT],
+          { env, timeout: 15000, windowsHide: true })
+        console.log('PowerShell Node environment probe', { minimal, bytes: stdout.length })
+      } catch (error) {
+        console.log('PowerShell Node environment probe', { minimal, code: error.code, killed: error.killed, stderr: error.stderr })
+      }
+    }
+  }
   const resultPath = join(temp, 'checks.txt')
   const harnessPath = join(temp, 'checks.mjs')
   await writeFile(harnessPath, `
@@ -113,8 +133,7 @@ test('packaged Bun serves Nuxt, assets and inventory without system JS tools or 
   await exec(join(app, windows ? 'bin/bun.exe' : 'MacOS/bun'), [harnessPath], {
     cwd: temp,
     env: {
-      ...Object.fromEntries(['SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'USERPROFILE', 'LOCALAPPDATA']
-        .filter(key => process.env[key] !== undefined).map(key => [key, process.env[key]])),
+      ...process.env,
       PATH: '', LANG: 'en_US.UTF-8', NODE_ENV: 'production'
     },
     timeout: 75000
