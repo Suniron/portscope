@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { cp, mkdtemp, rm } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -28,8 +28,10 @@ test('packaged Bun serves Nuxt, assets and inventory without system JS tools or 
   await cp(join(root, 'scripts/config.mjs'), join(temp, 'scripts/config.mjs'), { recursive: true })
   const runtime = pathToFileURL(join(temp, 'desktop/runtime.ts')).href
   const entrypoint = pathToFileURL(join(app, 'Resources/app/nuxt/server/index.mjs')).href
-  const { stdout } = await exec(join(app, windows ? 'bin/bun.exe' : 'MacOS/bun'), ['--eval', `
+  const resultPath = join(temp, 'checks.txt')
+  await exec(join(app, windows ? 'bin/bun.exe' : 'MacOS/bun'), ['--eval', `
     import assert from 'node:assert/strict'
+    import { writeFile } from 'node:fs/promises'
     import { createServer } from 'node:net'
     import { once } from 'node:events'
     import { request } from 'node:http'
@@ -73,7 +75,7 @@ test('packaged Bun serves Nuxt, assets and inventory without system JS tools or 
         })
         assert.equal(status, 403)
       }
-      console.log('Packaged backend, assets, collection, IPC filtering and Host/Origin checks passed.')
+      await writeFile(${JSON.stringify(resultPath)}, 'checks passed')
     } finally {
       ipc.close()
       server.close()
@@ -88,5 +90,6 @@ test('packaged Bun serves Nuxt, assets and inventory without system JS tools or 
     },
     timeout: 30000
   })
-  assert.match(stdout, /checks passed/)
+  // Packaged Windows runtimes may not expose console output to the parent.
+  assert.equal(await readFile(resultPath, 'utf8'), 'checks passed')
 })
