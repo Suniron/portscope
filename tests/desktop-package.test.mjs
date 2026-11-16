@@ -6,14 +6,13 @@ import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import test from 'node:test'
-import { WINDOWS_LISTENERS_SCRIPT } from '../server/utils/windows.ts'
 
 const exec = promisify(execFile)
 const root = fileURLToPath(new URL('../', import.meta.url))
 
 test('packaged Bun serves Nuxt, assets and inventory without system JS tools or a GUI', {
   skip: process.env.PORTSCOPE_TEST_DESKTOP !== '1',
-  timeout: 120000
+  timeout: 45000
 }, async t => {
   const windows = process.platform === 'win32'
   assert(['darwin', 'win32'].includes(process.platform), 'Build and test on macOS or Windows.')
@@ -29,26 +28,6 @@ test('packaged Bun serves Nuxt, assets and inventory without system JS tools or 
   await cp(join(root, 'scripts/config.mjs'), join(temp, 'scripts/config.mjs'), { recursive: true })
   const runtime = pathToFileURL(join(temp, 'desktop/runtime.ts')).href
   const entrypoint = pathToFileURL(join(app, 'Resources/app/nuxt/server/index.mjs')).href
-  if (windows) {
-    for (const minimal of [true, false]) {
-      const env = minimal
-        ? Object.fromEntries(['SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'USERPROFILE', 'LOCALAPPDATA']
-          .filter(key => process.env[key] !== undefined).map(key => [key, process.env[key]]))
-        : { ...process.env }
-      env.PATH = [
-        join(process.env.SystemRoot, 'System32'),
-        join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0')
-      ].join(';')
-      try {
-        const { stdout } = await exec(join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'),
-          ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', WINDOWS_LISTENERS_SCRIPT],
-          { env, timeout: 15000, windowsHide: true })
-        console.log('PowerShell Node environment probe', { minimal, bytes: stdout.length })
-      } catch (error) {
-        console.log('PowerShell Node environment probe', { minimal, code: error.code, killed: error.killed, stderr: error.stderr })
-      }
-    }
-  }
   const resultPath = join(temp, 'checks.txt')
   const harnessPath = join(temp, 'checks.mjs')
   await writeFile(harnessPath, `
@@ -77,26 +56,6 @@ test('packaged Bun serves Nuxt, assets and inventory without system JS tools or 
         assert((await asset.arrayBuffer()).byteLength > 0, path)
       }
       const response = await fetch(origin + '/api/inventory')
-      if (response.status !== 200 && process.platform === 'win32') {
-        const { execFile } = await import('node:child_process')
-        const { promisify } = await import('node:util')
-        const probe = async (command, windowsHide) => {
-          try {
-            const result = await promisify(execFile)('powershell.exe', [
-              '-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command
-            ], { timeout: 15000, windowsHide, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 })
-            return result
-          } catch (error) {
-            return { message: error.message, code: error.code, killed: error.killed, stdout: error.stdout, stderr: error.stderr }
-          }
-        }
-        const diagnostics = {
-          hidden: await probe("'probe-ok'", true),
-          visible: await probe("'probe-ok'", false),
-          collection: await probe(${JSON.stringify(WINDOWS_LISTENERS_SCRIPT)}, true)
-        }
-        throw new Error('Inventory HTTP ' + response.status + ': ' + JSON.stringify(diagnostics))
-      }
       assert.equal(response.status, 200)
       assert.equal(response.headers.get('access-control-allow-origin'), null)
       const inventory = await response.json()
@@ -132,11 +91,12 @@ test('packaged Bun serves Nuxt, assets and inventory without system JS tools or 
   `)
   await exec(join(app, windows ? 'bin/bun.exe' : 'MacOS/bun'), [harnessPath], {
     cwd: temp,
+    // Keep Windows system variables required by CIM; only JS tool discovery is removed.
     env: {
       ...process.env,
       PATH: '', LANG: 'en_US.UTF-8', NODE_ENV: 'production'
     },
-    timeout: 75000
+    timeout: 30000
   }).catch(async error => {
     error.message += '\nPackaged checks: ' + await readFile(resultPath, 'utf8').catch(() => 'harness did not start')
     throw error

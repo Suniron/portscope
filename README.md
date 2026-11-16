@@ -7,6 +7,10 @@ and Linux collection, one Nuxt process, no database, no project registration.
 
 ### Desktop application (Electrobun)
 
+Download ready-to-use apps from [GitHub Releases](https://github.com/Suniron/portscope/releases/latest):
+`Portscope-macOS-arm64.zip` for Apple Silicon, or `win-x64-Portscope-Setup.zip`
+for Windows x64. Extract the whole archive before opening the app or installer.
+
 The standalone app includes Bun, the Nuxt server and all frontend assets. End users
 need neither Node, Bun nor pnpm. Build on the target OS with Node 22.18+ and pnpm
 (build-time only): macOS 14+ on Apple Silicon, or Windows 10/11 x64 with the
