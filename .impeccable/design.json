@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-16T00:00:00Z",
+  "title": "Portscope visual system",
+  "extensions": {
+    "breakpoints": [
+      { "name": "stacked-records", "value": "48rem" },
+      { "name": "wrapped-directory", "value": "72rem" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Port number",
+      "kind": "custom",
+      "description": "A listening port without an inferred web protocol.",
+      "html": "<span class=\"port-number\">3100</span>",
+      "css": ".port-number { display: inline-block; padding-block: .25rem; font: 650 .9375rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; color: inherit; }"
+    }
+  ]
+}
