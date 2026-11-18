@@ -29,16 +29,23 @@ configurable, defaulting to 3100. It can start automatically at login.
 
 ## Capabilities and Constraints
 
-- Read-only TCP inventory with search and periodic refresh.
+- TCP inventory with search, periodic refresh, per-process RAM/CPU usage and
+  elapsed runtime.
 - Process, directory, branch and worktree information when identifiable.
 - Browser links open in a new tab; unclassified TCP listeners offer an explicitly
   labeled HTTP attempt rather than being presented as known web services.
 - Remote branch links when the tracking branch and hosting provider are known.
+- Sort by port, elapsed runtime, project name, CPU or RAM; optionally show only services
+  with a known branch or worktree.
+- Copy branch names and open observed project/worktree directories in the system
+  file explorer or VS Code.
 - Unknown metadata and collection errors remain explicit.
 - Windows provides ports and process names; process working directories and their
   project/Git context remain unknown.
-- No service management, Docker requirement, central service or project-specific
-  dependencies.
+- Stop an identified process, individually or in a checked selection, after
+  confirmation. Normal stop is the default; force stop is an explicit option.
+- No service startup/restart, privilege escalation, Docker requirement, central
+  service or project-specific dependencies.
 - No collection of secrets, process environments or full command lines.
 - Keyboard-accessible controls and a usable narrow-screen layout.
 

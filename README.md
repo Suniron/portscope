@@ -1,7 +1,31 @@
 # Portscope
 
-A read-only dashboard of TCP services listening on your machine. macOS, Windows
+A dashboard of TCP services listening on your machine. macOS, Windows
 and Linux collection, one Nuxt process, no database, no project registration.
+
+Inspect RAM/CPU per process and stop one process or a checked selection after
+confirmation. Normal stop is the default; force stop is optional. Stopping may
+lose unsaved work. Portscope never elevates privileges or stops its own process
+or ancestors. Unknown process identity disables stopping.
+
+Elapsed runtime is shown in seconds, minutes or hours/minutes. Sort by port,
+runtime, project name, CPU or RAM, filter to known branches/worktrees, copy a branch name,
+and open an observed directory in your file explorer or VS Code.
+
+CPU needs two inventory samples; `100 %` means one logical CPU core. RAM is
+resident memory (RSS), not a sum of project processes. Missing measurements stay
+unknown. Under Windows, normal stop is not universally available: use the explicit
+force option when the interface reports it as unsupported.
+
+Process identity is checked again before stopping, but this is best-effort:
+on macOS the process start timestamp has second precision, and inspecting a PID
+then signaling it is not atomic. No elevated privileges are requested.
+
+On macOS and Linux, the stop dialog can also include a dedicated Node parent. Use
+this option when stopping the listener alone would leave a development watcher
+running. Portscope shows the parent PID and rechecks that it is a same-user Node
+process in the same process group, with the listener as its only child. It does
+not send a signal to the group or walk up to a shell or package manager.
 
 ## Run
 

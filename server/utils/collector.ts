@@ -8,6 +8,8 @@ import type { Inventory, ObservedService } from '../../shared/types/inventory.ts
 import { groupListeners, parseLsof, parseLsofCwds, parseSs } from './parsers.ts'
 import { branchWebUrl } from './branch-url.ts'
 import { parseWindowsListeners, WINDOWS_LISTENERS_SCRIPT } from './windows.ts'
+import { createMetricsSampler, findStopSupervisors, inspectProcesses, protectedPids } from './processes.ts'
+import type { ProcessInfo } from './processes.ts'
 
 const exec = promisify(execFile)
 const commandOptions = { timeout: 5000, maxBuffer: 4 * 1024 * 1024, encoding: 'utf8' as const }
@@ -239,10 +241,53 @@ export async function enrichServices(
   }
 }
 
-export async function collectInventory(signal?: AbortSignal): Promise<Inventory> {
+const sampleMetrics = createMetricsSampler()
+
+export async function collectProcessSnapshot(signal?: AbortSignal) {
   const platform = process.platform
   const result = await listeners(platform, signal)
   const services = groupListeners(result.listeners)
+  let processes = new Map<number, ProcessInfo>()
+  try {
+    processes = await inspectProcesses([], platform, signal)
+    if (platform === 'win32') {
+      for (const listener of result.listeners) {
+        if (listener.process && listener.pid !== null) {
+          processes.set(listener.pid, { ...listener.process, ppid: processes.get(listener.pid)?.ppid ?? null })
+        }
+      }
+    }
+  } catch {
+    result.warnings.push('Process identity, ancestry and resource metrics are unavailable; stopping is disabled and listeners remain visible.')
+  }
+  const ancestors = protectedPids(processes)
+  const supervisors = findStopSupervisors(processes, new Set(services.flatMap(service => service.pid === null ? [] : [service.pid])), ancestors)
+  // Retain samples only for current listeners, never for every process on the machine.
+  const metrics = sampleMetrics(new Map(services.flatMap(service => {
+    const info = service.pid === null ? undefined : processes.get(service.pid)
+    return info ? [[info.pid, info] as const] : []
+  })))
+  for (const service of services) {
+    const info = service.pid === null ? undefined : processes.get(service.pid)
+    service.processStartId = info?.processStartId ?? null
+    service.startedAt = info?.startedAt ?? null
+    service.metrics = metrics.get(service.pid!) ?? { rssBytes: null, cpuPercent: null }
+    service.stopDisabledReason = !ancestors || (service.pid !== null && ancestors.has(service.pid))
+      ? 'protected' : service.processStartId === null ? 'identity-unavailable' : null
+    const supervisor = service.pid === null ? undefined : supervisors.get(service.pid)
+    if (supervisor && service.stopDisabledReason === null) service.stopSupervisor = supervisor
+  }
+  if (!ancestors && !result.warnings.length) result.warnings.push('Process ancestry is unavailable; stopping is disabled.')
+  if (services.some(service => service.processStartId === null || service.metrics.rssBytes === null || service.metrics.cpuPercent === null)) {
+    result.warnings.push('Some process identity or resource metrics are unavailable; CPU needs two samples and unknown metrics do not hide listeners.')
+  }
+  return { services, processes, warnings: result.warnings }
+}
+
+export async function collectInventory(signal?: AbortSignal): Promise<Inventory> {
+  const platform = process.platform
+  const result = await collectProcessSnapshot(signal)
+  const services = result.services
   const directories = platform === 'darwin' ? await macCwds(services.slice(0, 96), signal) : null
   for (const service of services) identifyOwnEndpoint(service)
   // Limit metadata work, never the list of visible endpoints.
@@ -273,7 +318,7 @@ export function createInventoryCache(collect: (signal: AbortSignal) => Promise<I
   let pending: Promise<Inventory> | undefined
   let expiresAt = 0
   let activeCollections = 0
-  return () => {
+  const get = () => {
     if (!pending || Date.now() >= expiresAt) {
       // Permit recovery from one stuck collector, but never accumulate retries.
       if (activeCollections >= 2) {
@@ -292,13 +337,20 @@ export function createInventoryCache(collect: (signal: AbortSignal) => Promise<I
       const timeout = new Promise<Inventory>((_, reject) => {
         timer = setTimeout(() => { controller.abort(); reject(new CollectionError()) }, timeoutMs)
       })
-      pending = Promise.race([work, timeout]).finally(() => {
+      const request = Promise.race([work, timeout]).finally(() => {
         clearTimeout(timer)
-        expiresAt = Date.now() + ttl
+        if (pending === request) expiresAt = Date.now() + ttl
       })
+      pending = request
     }
     return pending
   }
+  return Object.assign(get, { invalidate() { pending = undefined; expiresAt = 0 } })
 }
 
 export const getInventory = createInventoryCache(collectInventory)
+let observedServices: Pick<ObservedService, 'pid' | 'processStartId' | 'project' | 'cwd' | 'stopSupervisor'>[] = []
+export function observeInventory(inventory: Inventory) {
+  observedServices = inventory.services.map(({ pid, processStartId, project, cwd, stopSupervisor }) => ({ pid, processStartId, project, cwd, stopSupervisor }))
+}
+export function getObservedServices() { return observedServices }

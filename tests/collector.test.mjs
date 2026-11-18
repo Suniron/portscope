@@ -125,6 +125,25 @@ test('cache retains a failure briefly, never disguises it as healthy empty or st
   assert.equal(calls, 1)
 })
 
+test('cache invalidation also discards in-flight results without expiring a newer request', async () => {
+  const releases = []
+  const cache = createInventoryCache(() => new Promise(resolve => releases.push(resolve)))
+  const old = cache()
+  cache.invalidate()
+  const fresh = cache()
+  assert.notEqual(old, fresh)
+  releases[0]({ services: ['old'] })
+  await old
+  assert.equal(cache(), fresh)
+  releases[1]({ services: ['new'] })
+  await fresh
+  assert.equal(cache(), fresh)
+  cache.invalidate()
+  const next = cache()
+  releases[2]({ services: ['next'] })
+  assert.deepEqual(await next, { services: ['next'] })
+})
+
 test('a real FIFO manifest cannot block project discovery', { skip: process.platform === 'win32', timeout: 8000 }, async t => {
   const temp = await mkdtemp(join(tmpdir(), 'portscope-fifo-'))
   t.after(() => rm(temp, { recursive: true, force: true }))
@@ -216,7 +235,12 @@ test('real platform collection returns safe inventory fields', {
   assert.equal(inventory.homeDirectory, await realpath(homedir()).catch(() => homedir()))
   assert(Array.isArray(inventory.warnings))
   for (const service of inventory.services) {
-    assert.deepEqual(Object.keys(service).sort(), ['cwd', 'endpoints', 'id', 'pid', 'processName', 'project'])
+    assert.deepEqual(Object.keys(service).filter(key => key !== 'stopSupervisor').sort(), ['cwd', 'endpoints', 'id', 'metrics', 'pid', 'processName', 'processStartId', 'project', 'startedAt', 'stopDisabledReason'])
+    if (service.stopSupervisor) {
+      assert.deepEqual(Object.keys(service.stopSupervisor).sort(), ['pid', 'processStartId'])
+      assert(Number.isSafeInteger(service.stopSupervisor.pid) && service.stopSupervisor.pid > 1)
+      assert.equal(typeof service.stopSupervisor.processStartId, 'string')
+    }
     assert(service.endpoints.length > 0)
     assert(!('commandLine' in service))
     assert(!('env' in service))

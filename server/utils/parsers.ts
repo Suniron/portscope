@@ -1,11 +1,13 @@
 import { isIP } from 'node:net'
 import type { ObservedService } from '../../shared/types/inventory.ts'
+import type { ProcessInfo } from './processes.ts'
 
 type Endpoint = ObservedService['endpoints'][number]
 export interface Listener {
   pid: number | null
   processName: string | null
   endpoint: Endpoint
+  process?: ProcessInfo
 }
 
 export function parseEndpoint(value: string): Endpoint | null {
@@ -73,7 +75,7 @@ export function groupListeners(listeners: Listener[]): ObservedService[] {
       : `pid:${pid}`
     let service = services.get(id)
     if (!service) {
-      service = { id, pid, processName, cwd: null, project: null, endpoints: [] }
+      service = { id, pid, processName, processStartId: null, startedAt: null, metrics: { rssBytes: null, cpuPercent: null }, stopDisabledReason: 'identity-unavailable', cwd: null, project: null, endpoints: [] }
       services.set(id, service)
     }
     if (!service.endpoints.some(e => e.address === endpoint.address && e.port === endpoint.port)) {

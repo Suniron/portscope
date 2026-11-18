@@ -1,10 +1,12 @@
 import { createError, defineEventHandler, setResponseHeader } from 'h3'
-import { getInventory } from '../utils/collector'
+import { getInventory, observeInventory } from '../utils/collector'
 
 export default defineEventHandler(async event => {
   setResponseHeader(event, 'Cache-Control', 'no-store')
   try {
-    return await getInventory()
+    const inventory = await getInventory()
+    observeInventory(inventory)
+    return inventory
   } catch {
     throw createError({
       statusCode: 503,

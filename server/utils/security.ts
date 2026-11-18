@@ -9,3 +9,11 @@ export function isAllowedRequest(host: string | undefined, origin: string | unde
     return false
   }
 }
+
+export function isAllowedMutation(
+  host: string | undefined, origin: string | undefined, contentType: string | undefined, action: string | undefined, expectedAction: 'stop' | 'open' = 'stop'
+): boolean {
+  if (!origin || !isAllowedRequest(host, origin) || action !== expectedAction
+    || !/^application\/json(?:\s*;.*)?$/i.test(contentType ?? '')) return false
+  return origin === new URL(`http://${host}`).origin
+}

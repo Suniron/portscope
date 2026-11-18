@@ -61,6 +61,10 @@ test('packaged Bun serves Nuxt, assets and inventory without system JS tools or 
       const inventory = await response.json()
       const own = inventory.services.find(service => service.pid === process.pid)
       assert(own, 'bundled runtime must collect its own listener')
+      assert.equal(own.stopDisabledReason, 'protected')
+      assert(own.metrics.rssBytes === null || own.metrics.rssBytes > 0)
+      assert(own.metrics.cpuPercent === null || own.metrics.cpuPercent >= 0)
+      assert.equal(typeof own.processStartId, 'string')
       assert(own.endpoints.some(endpoint => endpoint.url === origin))
       const ipcEndpoint = own.endpoints.find(endpoint => endpoint.port === ipc.address().port)
       assert(ipcEndpoint, 'same-process IPC listener must remain visible')
@@ -78,6 +82,23 @@ test('packaged Bun serves Nuxt, assets and inventory without system JS tools or 
         })
         assert.equal(status, 403)
       }
+      const stopBody = JSON.stringify({
+        targets: [{ pid: process.pid, processStartId: own.processStartId }],
+        force: true
+      })
+      const blocked = await fetch(origin + '/api/processes/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Portscope-Action': 'stop' },
+        body: stopBody
+      })
+      assert.equal(blocked.status, 403, 'mutation without Origin must fail closed')
+      const protectedStop = await fetch(origin + '/api/processes/stop', {
+        method: 'POST',
+        headers: { Origin: origin, 'Content-Type': 'application/json', 'X-Portscope-Action': 'stop' },
+        body: stopBody
+      })
+      assert.equal(protectedStop.status, 200)
+      assert.equal((await protectedStop.json()).results[0].status, 'protected')
       await writeFile(${JSON.stringify(resultPath)}, 'checks passed')
     } finally {
       ipc.close()

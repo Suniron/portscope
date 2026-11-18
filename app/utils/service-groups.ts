@@ -1,16 +1,18 @@
 import type { ObservedService } from '../../shared/types/inventory.ts'
 
 export function groupServices(services: ObservedService[], homeDirectory: string | undefined) {
-  const groups = new Map<string, { id: string, services: ObservedService[] }>()
+  const groups: { id: string, services: ObservedService[] }[] = []
   for (const service of services) {
-    const grouped = homeDirectory && service.cwd && service.cwd !== '/' && service.cwd !== homeDirectory
-    const id = grouped ? `directory:${service.cwd}` : `service:${service.id}`
-    let group = groups.get(id)
-    if (!group) {
-      group = { id, services: [] }
-      groups.set(id, group)
+    const isGroupable = Boolean(homeDirectory && service.cwd && service.cwd !== '/' && service.cwd !== homeDirectory)
+    const prevGroup = groups[groups.length - 1]
+    const dirPrefix = isGroupable ? `directory:${service.cwd}` : null
+
+    if (dirPrefix && prevGroup && prevGroup.services[0]?.cwd === service.cwd) {
+      prevGroup.services.push(service)
+    } else {
+      const id = dirPrefix ? `${dirPrefix}:${groups.length}` : `service:${service.id}`
+      groups.push({ id, services: [service] })
     }
-    group.services.push(service)
   }
-  return [...groups.values()]
+  return groups
 }

@@ -6,6 +6,7 @@ import test from 'node:test'
 import { collectInventory } from '../server/utils/collector.ts'
 import { groupListeners } from '../server/utils/parsers.ts'
 import { parseWindowsListeners, WINDOWS_LISTENERS_SCRIPT } from '../server/utils/windows.ts'
+import { WINDOWS_PARENTS_SCRIPT } from '../server/utils/processes.ts'
 
 const row = { pid: 42, processName: 'node', address: '127.0.0.1', port: 3000 }
 const windowsOnly = { skip: process.platform !== 'win32', timeout: 30000 }
@@ -15,6 +16,7 @@ test('Windows JSON accepts arrays, BOM, IPv4, IPv6 and inaccessible owner names'
   assert.deepEqual(parseWindowsListeners('\uFEFF[]\r\n'), [])
   assert.deepEqual(parseWindowsListeners(JSON.stringify([row])), [{
     pid: 42, processName: 'node',
+    process: { pid: 42, ppid: null, processStartId: null, startedAt: null, rssBytes: null, cpuSeconds: null },
     endpoint: { address: '127.0.0.1', port: 3000, family: 'IPv4', url: null }
   }])
   const services = groupListeners(parseWindowsListeners(`\uFEFF${JSON.stringify([
@@ -56,9 +58,26 @@ test('Windows JSON rejects invalid payloads instead of reporting a healthy empty
 
 test('Windows parser exposes only the approved inventory fields', () => {
   const [listener] = parseWindowsListeners(JSON.stringify([{ ...row, commandLine: 'private', environment: { secret: 'private' } }]))
-  assert.deepEqual(Object.keys(listener).sort(), ['endpoint', 'pid', 'processName'])
+  assert.deepEqual(Object.keys(listener).sort(), ['endpoint', 'pid', 'process', 'processName'])
   assert(!JSON.stringify(listener).includes('private'))
   assert.doesNotMatch(WINDOWS_LISTENERS_SCRIPT, /CommandLine|Environment|ExecutablePath|ReadProcessMemory|Win32_Process/i)
+  assert.match(WINDOWS_PARENTS_SCRIPT, /-Property ProcessId,ParentProcessId/)
+  assert.doesNotMatch(WINDOWS_PARENTS_SCRIPT, /CommandLine|Environment|ExecutablePath|ReadProcessMemory/i)
+})
+
+test('Windows listener metrics keep listeners when individual fields are unreadable', () => {
+  const [known, unknown] = parseWindowsListeners(JSON.stringify([
+    { ...row, processStartId: '639305425840000000', startedAt: '2026-11-17T12:03:04.1234567Z', rssBytes: 123456, cpuSeconds: 5.25 },
+    { ...row, port: 3001, processStartId: {}, startedAt: 'unknown', rssBytes: 'no', cpuSeconds: -1 }
+  ]))
+  assert.equal(known.process.processStartId, '639305425840000000')
+  assert.equal(known.process.startedAt, '2026-11-17T12:03:04.123Z')
+  assert.equal(known.process.rssBytes, 123456)
+  assert.equal(known.process.cpuSeconds, 5.25)
+  assert.equal(unknown.process.processStartId, null)
+  assert.equal(unknown.process.startedAt, null)
+  assert.equal(unknown.process.rssBytes, null)
+  assert.equal(unknown.process.cpuSeconds, null)
 })
 
 test('PowerShell script emits UTF-8 JSON arrays for zero/one/many listeners and tolerates inaccessible owners', windowsOnly, async () => {
@@ -76,7 +95,12 @@ function Get-NetTCPConnection { ${connections} }
 function Get-Process {
   param([int]$Id)
   if ($Id -eq 99) { throw 'Access denied' }
-  [pscustomobject]@{ ProcessName = ('d' + [char]0xE9 + 'veloppeur') }
+  [pscustomobject]@{
+    ProcessName = ('d' + [char]0xE9 + 'veloppeur')
+    StartTime = [datetime]'2026-11-17T12:03:04Z'
+    WorkingSet64 = 123456
+    TotalProcessorTime = [timespan]::FromSeconds(5.25)
+  }
 }
 ${WINDOWS_LISTENERS_SCRIPT}`
     const { stdout, stderr } = await exec('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], {
@@ -85,8 +109,19 @@ ${WINDOWS_LISTENERS_SCRIPT}`
     assert.equal(stderr.trim(), '')
     const listeners = parseWindowsListeners(stdout)
     assert.equal(listeners.length, connections === '@()' ? 0 : connections.includes('Established') ? 2 : 1)
-    if (listeners.length) assert.equal(listeners[0].processName, 'développeur')
-    if (listeners.length === 2) assert.equal(listeners[1].processName, null)
+    if (listeners.length) {
+      assert.equal(listeners[0].processName, 'développeur')
+      assert.equal(typeof listeners[0].process.processStartId, 'string')
+      assert.equal(listeners[0].process.startedAt, '2026-11-17T12:03:04.000Z')
+      assert.equal(listeners[0].process.rssBytes, 123456)
+      assert.equal(listeners[0].process.cpuSeconds, 5.25)
+    }
+    if (listeners.length === 2) {
+      assert.equal(listeners[1].processName, null)
+      assert.equal(listeners[1].process.processStartId, null)
+      assert.equal(listeners[1].process.rssBytes, null)
+      assert.equal(listeners[1].process.cpuSeconds, null)
+    }
   }
   await assert.rejects(exec('powershell.exe', [
     '-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
@@ -123,6 +158,10 @@ test('real Windows inventory observes this process TCP ports without project or 
   assert(own, 'must report our PID')
   assert.equal(typeof own.processName, 'string')
   assert(own.processName.length > 0)
+  assert.equal(typeof own.processStartId, 'string')
+  assert(Number.isFinite(Date.parse(own.startedAt)))
+  assert.equal(own.stopDisabledReason, 'protected')
+  assert(own.metrics.rssBytes > 0)
   for (const server of servers) {
     const { address, port, family } = server.address()
     const endpoint = own.endpoints.find(endpoint => endpoint.address === address && endpoint.port === port)

@@ -10,6 +10,11 @@ export interface ObservedService {
   id: string
   pid: number | null
   processName: string | null
+  processStartId: string | null
+  startedAt: string | null
+  metrics: { rssBytes: number | null; cpuPercent: number | null }
+  stopDisabledReason: 'protected' | 'identity-unavailable' | null
+  stopSupervisor?: { pid: number; processStartId: string }
   cwd: string | null
   project: {
     root: string

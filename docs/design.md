@@ -4,7 +4,7 @@ Status: implemented; macOS validation completed.
 
 ## Purpose
 
-A small, read-only web dashboard showing services currently listening on the
+A small web dashboard showing services currently listening on the
 local machine. It works with arbitrary projects and requires no project-specific
 integration or registration.
 
@@ -43,7 +43,22 @@ See [the glossary](../GLOSSARY.md) for the domain vocabulary.
   inventory. An unavailable collector must not make stale data look current.
 - Include services whose project context cannot be determined.
 - Report only information accessible to the current user; no elevated collector.
-- Observe services without starting, stopping or restarting them.
+- Show per-process RAM/CPU when available, without hiding listeners whose
+  resource metrics cannot be read.
+- Show elapsed runtime in seconds, minutes or hours/minutes. Sort rows in either
+  direction by port, duration, project name, CPU or RAM, without grouping overriding order.
+  CPU and RAM have separate columns; missing measurements remain last in either direction.
+- Offer a checkbox filter for rows with an identified branch or worktree.
+- Copy the branch name with a button immediately after its external link arrow.
+- Open the observed worktree/project directory in the file explorer or VS Code,
+  without accepting arbitrary client-supplied paths or changing OS defaults.
+- Allow stopping a process or a checked selection after a confirmation listing
+  the target processes. Default to normal stop, with an explicit force option.
+- On macOS/Linux, offer to include the displayed PID of a dedicated Node parent
+  in that confirmation. Do not signal shared launchers or process groups.
+- Revalidate process identity before stopping; never accept arbitrary PIDs from
+  a page. Protect Portscope and its ancestors, and report per-process failures.
+- Never elevate privileges or start/restart services.
 - Do not collect process environments, secrets, request cookies or full command
   lines that could expose credentials.
 - No project-specific names, dependencies, configuration rules or examples.
@@ -66,6 +81,13 @@ See [the glossary](../GLOSSARY.md) for the domain vocabulary.
 9. The UI remains usable with a narrow viewport and keyboard navigation.
 10. A recognized upstream branch opens its hosting provider in a new tab;
     credentials, query parameters and fragments never appear in its link.
+11. RAM and CPU appear per process; unknown or warming-up values are explicit.
+12. Single and bulk stop require confirmation. Filtering never silently includes
+    hidden selections, and reused PIDs cannot be stopped using stale identities.
+13. Cross-origin requests cannot stop processes; inaccessible or protected
+    processes report an error without aborting the rest of a batch.
+14. Sorting, filtering and elapsed time remain usable on narrow screens. Opening
+    directories is same-origin only and validates the observed process identity.
 
 ## Verification
 
@@ -79,3 +101,18 @@ See [the glossary](../GLOSSARY.md) for the domain vocabulary.
 - Native Linux execution, a fresh macOS login, real network-filesystem stalls and
   a screen-reader session remain unverified. Linux unit fixtures are not native
   platform validation.
+
+### Process controls and navigation
+
+- Unit coverage includes process identity, ancestry protection, CPU sampling,
+  stop validation, per-target outcomes, directory opening, sorting and selection.
+- Production integration stops only its own TCP fixtures, exercises CSRF refusal
+  and rejects stale identities. It waits for fixture metadata because partial
+  collection under load is an intentional bounded response.
+- The standalone macOS package checks its own metrics and protection and rejects
+  mutation requests without an Origin.
+- Browser checks at 1320px and 390px cover individual/bulk/forced stops on test
+  fixtures, selection pruning, cancel, sorting, Git filtering and branch copying.
+  Finder opening was verified against the observed project directory.
+- Native Windows/Linux process control and a screen-reader session are not
+  validated by the macOS checks.

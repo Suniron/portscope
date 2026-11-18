@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { isAllowedRequest } from '../server/utils/security.ts'
+import { isAllowedMutation, isAllowedRequest } from '../server/utils/security.ts'
 import { assertNotRoot, parsePort, serverEnvironment } from '../scripts/config.mjs'
 import { checkPort } from '../scripts/start.mjs'
 import { createServer } from 'node:net'
@@ -16,6 +16,21 @@ test('only loopback Host and exact same-origin requests are allowed', () => {
   for (const origin of ['https://evil.test', 'http://evil.test', 'null', 'http://localhost:80', 'http://127.0.0.1:8081', 'https://127.0.0.1:8080']) {
     assert(!isAllowedRequest('127.0.0.1:8080', origin), origin)
   }
+})
+
+test('mutations require a present exact Origin, JSON and the explicit action header', () => {
+  const host = '127.0.0.1:3100'
+  const origin = `http://${host}`
+  assert(isAllowedMutation(host, origin, 'application/json', 'stop'))
+  assert(isAllowedMutation(host, origin, 'application/json; charset=utf-8', 'open', 'open'))
+  for (const value of [undefined, '', 'null', 'http://evil.example', `${origin}/`, `${origin}/path`, `${origin}?query`, `http://user@${host}`]) {
+    assert(!isAllowedMutation(host, value, 'application/json', 'stop'), String(value))
+  }
+  for (const value of [undefined, 'text/plain', 'application/x-www-form-urlencoded', 'multipart/form-data', 'application/jsonp']) {
+    assert(!isAllowedMutation(host, origin, value, 'stop'), String(value))
+  }
+  for (const value of [undefined, '', 'kill', 'Stop', 'open']) assert(!isAllowedMutation(host, origin, 'application/json', value))
+  assert(!isAllowedMutation('evil.example', 'http://evil.example', 'application/json', 'stop'))
 })
 
 test('port configuration defaults to 3100 and rejects invalid or ambiguous inputs', () => {

@@ -19,7 +19,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Test Windows collection and desktop runtime
-        run: node --test tests/windows*.test.mjs tests/collector.test.mjs tests/desktop.test.mjs tests/parsers.test.mjs tests/browser-url.test.mjs tests/security.test.mjs tests/service-groups.test.mjs
+        run: node --test tests/windows*.test.mjs tests/processes.test.mjs tests/process-open.test.mjs tests/collector.test.mjs tests/desktop.test.mjs tests/parsers.test.mjs tests/browser-url.test.mjs tests/security.test.mjs tests/service-groups.test.mjs
       - name: Build Windows x64 installer
         run: pnpm desktop:build
       - name: Typecheck

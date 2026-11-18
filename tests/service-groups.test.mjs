@@ -7,19 +7,29 @@ const service = (id, cwd, port) => ({
   endpoints: [{ address: '127.0.0.1', port, family: 'IPv4', url: null }],
 })
 
-test('same exact cwd groups services without losing process/port associations or changing input', () => {
-  const services = [
+test('same exact cwd groups adjacent services without losing process/port associations, changing input or breaking sort order', () => {
+  const adjacentServices = [
+    service('1', '/work/app', 3000),
+    service('3', '/work/app', 3050),
+    service('2', '/work/other', 3100),
+    service('4', '/work/app/subdirectory', 5000),
+  ]
+  const original = structuredClone(adjacentServices)
+  const groups = groupServices(adjacentServices, '/home/dev')
+  assert.deepEqual(groups.map(group => group.services.map(service => service.id)), [['1', '3'], ['2'], ['4']])
+  assert.equal(groups[0].services[1], adjacentServices[1])
+  assert.deepEqual(adjacentServices, original)
+
+  // Non-adjacent services with the same cwd remain separate to preserve global sort order
+  const nonAdjacent = [
     service('1', '/work/app', 3000),
     service('2', '/work/other', 3100),
     service('3', '/work/app', 4000),
-    service('4', '/work/app/subdirectory', 5000),
   ]
-  const original = structuredClone(services)
-  const groups = groupServices(services, '/home/dev')
-  assert.deepEqual(groups.map(group => group.services.map(service => service.id)), [['1', '3'], ['2'], ['4']])
-  assert.equal(groups[0].services[1], services[2])
-  assert.deepEqual(services, original)
-  assert.deepEqual(groupServices(services.filter(service => service.id === '3'), '/home/dev')[0].services, [services[2]])
+  assert.deepEqual(groupServices(nonAdjacent, '/home/dev').map(group => group.services.map(service => service.id)), [['1'], ['2'], ['3']])
+  assert.deepEqual(groupServices(adjacentServices.filter(service => service.id === '3'), '/home/dev')[0].services, [adjacentServices[1]])
+  const colonPaths = [service('1', '/work/api:legacy', 3000), service('2', '/work/api', 4000)]
+  assert.deepEqual(groupServices(colonPaths, '/home/dev').map(group => group.services.length), [1, 1])
 })
 
 test('root, actual home directory, and unknown cwd remain separate; home subdirectories group', () => {
